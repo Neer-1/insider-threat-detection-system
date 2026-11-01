@@ -1,0 +1,7 @@
+# NEW — the agent's own minimal dependency set, deliberately separate from
+# the root requirements.txt (FastAPI/SQLAlchemy/scikit-learn/torch have no
+# business being bundled into an employee-device executable). Needed for
+# the eventual PyInstaller packaging step.
+
+requests
+psutil

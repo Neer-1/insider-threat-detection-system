@@ -1,0 +1,8 @@
+# Optional academic experiments only. Not required for the synthetic rules demo.
+# No weights are included, and these packages/models were not run in release verification.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.13.0+cpu
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.4.2
+# Historical experiment versions, NOT a security-cleared deployment recommendation.

@@ -1,0 +1,1504 @@
+/* litds dashboard styles — visual direction: quiet by default, loud only
+   where risk is. Replaces the earlier generic-dark-dashboard-template pass
+   (rounded-everything, one decorative accent glow, soft shadows) with a
+   system specific to what this tool does: severity color is reserved
+   entirely for the low/medium/high/critical bands already computed
+   server-side (core/config.py's risk_level_for_score), interactive chrome
+   uses its own distinct neutral accent so a button is never mistaken for a
+   risk signal, and data values get a monospace face separate from UI
+   chrome the way real monitoring tools (Grafana/Datadog-style, not a
+   marketing site) do. Direction was proposed and approved as a standalone
+   artifact before being applied here — see that artifact for the palette
+   rationale in full; this file is the implementation of it.
+   Still plain CSS, no preprocessor, no build step. */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+:root {
+  /* ---- Base neutrals: gray-black, not blue-tinted -- deliberately not
+     another GitHub-dark clone. ---- */
+  --bg: #0a0a0b;
+  --surface: #131315;
+  --surface-2: #1b1b1e;
+  --border: #2b2b2f;
+  --border-strong: #404046;
+  --text: #e8e8ea;
+  --text-dim: #96969c;
+  --text-faint: #5c5c62;
+
+  /* ---- Interactive chrome accent -- buttons/links/focus ONLY. Never a
+     severity signal, never used decoratively. ---- */
+  --accent: #6f93a8;
+  --accent-dim: #2e4453;
+
+  /* ---- AI Reasoning Core source marker -- a distinct hue from accent AND
+     from severity, because "this came from the LLM layer, not the
+     deterministic pipeline" is a real thing worth flagging, not
+     decoration. ---- */
+  --ai: #9884bd;
+  --ai-bg: rgba(152,132,189,.14);
+
+  /* ---- Volume/trend data-viz marker -- Overview's "Alerts Over Time"
+     line/area chart specifically. A third distinct hue from both accent
+     (interactive chrome only) and the severity ramp (the four risk bands
+     only): this chart tracks ALERT COUNT over time, not severity, so
+     coloring it severity-red (or reusing accent, which would misleadingly
+     suggest it's clickable/interactive) would be wrong on both counts --
+     same "a real, distinct meaning earns its own token" precedent --ai
+     above already established, not a one-off exception. ---- */
+  --trend: #5b9bd5;
+  --trend-bg: rgba(91,155,213,.18);
+
+  /* ---- Severity ramp -- the ONLY place these four colors mean anything.
+     Saturation increases with severity: low is the quietest color in the
+     whole palette, critical is the only one loud enough to interrupt. ---- */
+  --low: #4f9668;
+  --low-bg: rgba(79,150,104,.14);
+  --medium: #c2992e;
+  --medium-bg: rgba(194,153,46,.14);
+  --high: #d1793c;
+  --high-bg: rgba(209,121,60,.14);
+  --critical: #d64545;
+  --critical-bg: rgba(214,69,69,.16);
+
+  /* ---- Geometry: sharp, not soft. 3px default, 2px on tags/badges, 0 on
+     data-dense rows (set directly where used, not tokenized). ---- */
+  --radius: 3px;
+  --radius-tag: 2px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 18px;
+  --space-5: 26px;
+
+  /* Only the two genuinely floating layers (nav drawer, modal overlays)
+     get a shadow -- everything in normal page flow is flat, hierarchy
+     comes from the bg/surface/surface-2 steps and 1px borders instead. */
+  --shadow-float: 0 12px 32px rgba(0,0,0,.55);
+
+  --sans: -apple-system, "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, "Roboto Mono", monospace;
+}
+
+/* LIGHT THEME -- toggled via a data-theme="light" attribute on <html>
+   (dashboard/app.js's setTheme(), set on load by index.html's inline head
+   script so there's no flash of the wrong theme before app.js's `defer`
+   script runs). Dark (the plain :root above) stays the default -- nothing
+   needs to be present for it, matching "current behavior unless the user
+   opts into light." Every token that carries real meaning elsewhere
+   (severity ramp, the AI source marker, interactive chrome) gets its own
+   light-appropriate value here rather than leaving any of them pointing at
+   a dark-tuned color that would read wrong on a light background -- same
+   set of custom properties as the dark block above, so every rule in this
+   file that already consumes them via var(--x) needs no changes at all. */
+:root[data-theme="light"] {
+  --bg: #f4f4f6;
+  --surface: #ffffff;
+  --surface-2: #eceef0;
+  --border: #dcdce1;
+  --border-strong: #c2c2c9;
+  --text: #17171b;
+  --text-dim: #55555f;
+  --text-faint: #8a8a93;
+
+  --accent: #3f6b82;
+  --accent-dim: #dbe8ee;
+
+  --ai: #6c56a3;
+  --ai-bg: rgba(108,86,163,.10);
+
+  --trend: #2f6fa8;
+  --trend-bg: rgba(47,111,168,.12);
+
+  --low: #2f7a49;
+  --low-bg: rgba(47,122,73,.12);
+  --medium: #93701b;
+  --medium-bg: rgba(147,112,27,.12);
+  --high: #b6591f;
+  --high-bg: rgba(182,89,31,.12);
+  --critical: #b93333;
+  --critical-bg: rgba(185,51,51,.12);
+
+  --shadow-float: 0 12px 32px rgba(20,20,25,.16);
+}
+
+/* ACCENT PRESETS -- interactive-chrome-only alternatives to the default
+   teal (dashboard/app.js's setAccent()), independent of the dark/light
+   choice above (same hex either way -- kept deliberately simple; these
+   only ever touch --accent/--accent-dim, never the severity/neutral
+   tokens that carry actual meaning). 'default' has no override block of
+   its own -- it's just the absence of data-accent, reading whichever
+   theme block above is already active. */
+:root[data-accent="indigo"] { --accent: #7c8fe0; --accent-dim: #2a2f57; }
+:root[data-theme="light"][data-accent="indigo"] { --accent-dim: #e2e4f7; }
+:root[data-accent="green"] { --accent: #5fa877; --accent-dim: #1e3a27; }
+:root[data-theme="light"][data-accent="green"] { --accent-dim: #dcefe1; }
+
+html { scrollbar-color: var(--border) var(--bg); }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+button, input, select {
+  font-family: inherit;
+}
+h1, h2, h3 { font-weight: 700; letter-spacing: -.01em; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Data-value utility -- risk scores, timestamps, IPs, hostnames, device
+   fingerprints/codes, log lines. Applied surgically (specific classes/
+   containers below), not blanket across the page -- chrome stays sans. */
+.mono, .mono * { font-family: var(--mono); }
+
+/* AUTH SCREEN */
+.auth-screen {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.auth-card {
+  width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+}
+.auth-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.auth-sub {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 24px;
+}
+.field {
+  margin-bottom: 14px;
+}
+.field label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.field input, .field select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color .12s ease;
+}
+.field input:focus, .field select:focus { border-color: var(--accent); }
+.btn {
+  width: 100%;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  padding: 11px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 6px;
+  transition: opacity .12s ease;
+}
+.btn:hover { opacity: .88; }
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+.auth-toggle {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: center;
+}
+.auth-toggle a {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: none;
+}
+.auth-toggle a:hover { text-decoration: underline; }
+.auth-error {
+  background: var(--critical-bg);
+  border: 1px solid var(--critical);
+  color: var(--critical);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 14px;
+  display: none;
+}
+
+/* TOPBAR */
+.topbar {
+  /* Was 60px -- reduced by ~19px (~0.5cm @ 96dpi) per the header-sizing
+     pass. Contents below (hamburger button, stat pills, logo line-height)
+     were shrunk/tightened to match rather than left to overflow a bar
+     that's now shorter than they are tall. */
+  height: 41px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-4);
+  gap: var(--space-3);
+}
+.topbar-left { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.hamburger-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  transition: border-color .12s ease;
+}
+.hamburger-btn:hover { border-color: var(--accent); }
+.hamburger-btn span { display: block; width: 14px; height: 2px; background: currentColor; position: relative; }
+.hamburger-btn span::before, .hamburger-btn span::after {
+  content: ""; position: absolute; left: 0; width: 14px; height: 2px; background: currentColor;
+}
+.hamburger-btn span::before { top: -4px; }
+.hamburger-btn span::after { top: 4px; }
+.logo { display: flex; flex-direction: column; min-width: 0; justify-content: center; }
+.logo-title { font-size: 15px; font-weight: 700; white-space: nowrap; letter-spacing: -.005em; line-height: 1.2; }
+/* Links back to the dashboard -- inherits .logo-title's own styling at
+   rest (no visual change to the topbar's normal appearance), same
+   restrained "only differs on hover/focus" treatment as .panel-title-link. */
+.logo-title-link { display: block; color: inherit; text-decoration: none; }
+.logo-title-link:hover, .logo-title-link:focus-visible { color: var(--accent); text-decoration: underline; }
+.logo-sub { font-family: var(--mono); font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+/* Was gap: var(--space-2) (already 8px) -- set to an explicit 8px here so
+   this specific spacing stays exactly what was asked for (~2mm @ 96dpi)
+   regardless of any future change to the shared --space-2 token
+   elsewhere. */
+.top-stats { display: flex; gap: 8px; align-items: center; position: relative; }
+.stat-pill {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-tag);
+  padding: 4px 12px;
+  min-width: 84px;
+}
+.stat-label { color: var(--text-faint); font-size: 8px; font-weight: 700; letter-spacing: .07em; margin-bottom: 2px; line-height: 1.1; }
+.stat-value { font-family: var(--mono); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; white-space: nowrap; }
+
+/* Top bar KPI pills -- Online/Critical/Open Alerts are dropdown buttons
+   now (was 4 plain static pills; "Employees" merged into Online as a
+   ratio). Each wrapper is the dropdown's own positioning context so the
+   panel below anchors to ITS pill specifically, not the whole topbar. */
+.stat-pill-dropdown { position: relative; }
+.stat-pill-btn {
+  display: block;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .12s ease;
+}
+.stat-pill-btn:hover { border-color: var(--border-strong); }
+.stat-pill-btn.active { border-color: var(--accent); }
+.stat-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-float);
+  padding: 6px;
+  z-index: 1002;
+}
+/* Critical and Open Alerts sit close to the topbar's right edge (Online,
+   the leftmost of the 3 pills, has enough pills-plus-padding to its own
+   right that a left-anchored panel never reaches the edge -- confirmed by
+   computed position, not just left as-is by assumption). Anchoring these
+   two to the button's RIGHT edge instead means the panel's own right
+   edge can never sit further right than the button that opened it --
+   which is itself already guaranteed on-screen by the topbar's normal
+   flex layout -- so it expands leftward into the page instead of
+   clipping past the viewport. */
+.stat-dropdown.stat-dropdown-align-right { left: auto; right: 0; }
+.stat-dropdown-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: var(--radius-tag);
+}
+.stat-dropdown-row:hover { background: var(--surface-2); }
+.stat-dropdown-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-dropdown-name:hover { color: var(--accent); text-decoration: underline; }
+.stat-dropdown-dept {
+  flex: none;
+  max-width: 90px;
+  color: var(--text-dim);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-dropdown-score { flex: none; font-family: var(--mono); font-size: 12.5px; font-weight: 700; min-width: 22px; text-align: right; }
+.stat-dropdown-empty { color: var(--text-faint); font-size: 12px; padding: 10px; text-align: center; }
+
+/* NAV PANEL (hamburger drawer) */
+.nav-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  opacity: 0; pointer-events: none; transition: opacity .15s ease; z-index: 1000;
+}
+.nav-backdrop.open { opacity: 1; pointer-events: auto; }
+.nav-panel {
+  position: fixed; top: 0; left: 0; bottom: 0; width: 272px;
+  background: var(--surface); border-right: 1px solid var(--border);
+  box-shadow: var(--shadow-float);
+  transform: translateX(-100%); transition: transform .16s ease;
+  z-index: 1001; display: flex; flex-direction: column;
+}
+.nav-panel.open { transform: translateX(0); }
+.nav-account {
+  padding: var(--space-4); border-bottom: 1px solid var(--border);
+}
+.nav-account-name { font-weight: 700; font-size: 14px; }
+.nav-account-sub { font-family: var(--mono); font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+.nav-links { padding: var(--space-2) 0; flex: 1; overflow-y: auto; }
+.nav-link {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  width: 100%; text-align: left; background: transparent; border: none; color: var(--text);
+  padding: 11px var(--space-4); font-size: 13.5px; cursor: pointer;
+  transition: background .1s ease;
+}
+.nav-link:hover { background: var(--surface-2); }
+.nav-link .nav-badge {
+  font-family: var(--mono); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-tag);
+  font-size: 11px; color: var(--text-dim); padding: 2px 7px;
+}
+
+/* Appearance settings -- theme + accent, sits between the scrollable
+   nav-links list and the fixed nav-footer, same "fixed section" treatment
+   as nav-account above it, so it's always visible without needing to
+   scroll the links list. */
+.nav-section { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); }
+.nav-section-title {
+  font-size: 10.5px; font-weight: 700; color: var(--text-faint);
+  letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px;
+}
+.theme-toggle-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.theme-btn {
+  flex: 1; background: transparent; border: 1px solid var(--border-strong); color: var(--text-dim);
+  border-radius: var(--radius); padding: 7px; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  transition: border-color .12s ease, color .12s ease, background .12s ease;
+}
+.theme-btn:hover { border-color: var(--accent); color: var(--text); }
+.theme-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.accent-swatch-row { display: flex; gap: 9px; }
+.accent-swatch {
+  width: 20px; height: 20px; border-radius: 50%; padding: 0; cursor: pointer;
+  border: 2px solid transparent; box-shadow: 0 0 0 1px var(--border-strong);
+  transition: border-color .12s ease;
+}
+.accent-swatch.active { border-color: var(--text); }
+.accent-swatch.accent-default { background: #6f93a8; }
+.accent-swatch.accent-indigo { background: #7c8fe0; }
+.accent-swatch.accent-green { background: #5fa877; }
+
+.nav-footer { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); }
+
+/* APP BODY -- height fixed to exactly what's left below the topbar (the
+   only thing that stays visibly fixed); each view inside picks its own
+   scroll behavior rather than sharing one:
+     - #profileView (.page, further down) gets its own height:100%;
+       overflow-y:auto -- the whole profile page scrolls as ONE continuous
+       unit (see .page's own comment).
+     - #companyView (.page) -- same treatment, inherited from .page.
+     - #dashboardView (below) is a flex column: its three core panels
+       (.layout) fill whatever room is left after the Overview extras
+       section below them takes its own compact, natural size -- see
+       #dashboardView's own comment for the reasoning, and .layout's/
+       .overview-extras's for how the space is actually split. */
+.app-body { height: calc(100vh - 41px); overflow: hidden; padding: var(--space-3); }
+
+/* DASHBOARD VIEW -- a flex column with exactly one flexible item
+   (.layout, flex:1) and one intrinsically-sized item (.overview-extras,
+   flex:none) below it -- the standard, unambiguous "fixed-size footer +
+   fill-the-rest main area" flex pattern, not the flex-grow-vs-explicit-
+   height tension an earlier pass here worried about (that concern was
+   about trying to pin .layout to an EXACT external measurement while ALSO
+   asking flex to size it -- pure "give this one all the leftover space"
+   is exactly what flex-grow is for and has no such ambiguity). If both
+   together still don't fit (a short viewport), .layout's own min-height
+   floor (see its own rule) is what .overview-extras's flex-shrink:0
+   refuses to give up any room for -- .layout shrinks first, and only
+   past ITS floor does this container's own overflow-y:auto kick in and
+   the page scrolls a little, the same explicitly-preferred fallback as
+   every round of this layout so far. */
+#dashboardView { height: 100%; display: flex; flex-direction: column; overflow-y: auto; }
+.empty-state, .pending-panel { flex: none; }
+
+/* EMPTY STATE */
+.empty-state {
+  max-width: 600px;
+  margin: 56px auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+  text-align: center;
+}
+.empty-state h2 { font-size: 19px; margin-bottom: 8px; }
+.empty-state p { color: var(--text-dim); font-size: 14px; margin-bottom: 20px; line-height: 1.6; }
+.code-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 17px;
+  letter-spacing: .04em;
+  word-break: break-all;
+  margin-bottom: 12px;
+}
+.copy-btn {
+  margin-top: 10px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: border-color .12s ease;
+}
+.copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+.empty-steps {
+  text-align: left;
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.9;
+}
+
+/* PENDING DEVICES PANEL -- "needs approval" is an administrative queue,
+   not a risk signal, so it does NOT borrow the `high` severity color the
+   way the previous pass did (orange, purely because it was the theme
+   accent). Uses the neutral interactive accent instead. */
+.pending-panel {
+  max-width: 880px;
+  margin: 0 auto 14px auto;
+  background: var(--surface);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.pending-header {
+  padding: 12px 16px;
+  background: var(--accent-dim);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.pending-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.pending-info { flex: 1; min-width: 180px; }
+.pending-hostname { font-weight: 700; font-size: 13.5px; }
+.pending-meta { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+.pending-row input, .pending-row select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 13px;
+}
+.approve-btn {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 13px;
+  transition: opacity .12s ease;
+}
+.approve-btn:hover { opacity: .88; }
+
+/* MAIN LAYOUT -- flex:1, filling whatever height #dashboardView's flex
+   column has left after .overview-extras below takes its own compact,
+   intrinsic size (a deliberate change: an earlier pass anchored THIS
+   panel to a real DOM measurement of "4 employee cards" and gave the
+   leftover space to the charts below; now that Live Employee Monitoring
+   is a compact row-list rather than large cards -- see .employee-list's
+   own comment -- there's no fixed "N items" target to anchor to any
+   more, and the actual ask became "redistribute reclaimed chart-box
+   space back to this row" -- i.e. flip which side is intrinsic and which
+   side fills the rest). min-height: 320px is the floor below which this
+   stops shrinking further even on a short viewport -- past that point
+   #dashboardView's own overflow-y:auto (already in place) takes over and
+   the page scrolls a little rather than squeezing the panels illegibly,
+   the same explicitly preferred fallback as every round of this layout
+   so far. Its grid children (the three .panel columns) still get a real
+   bounded height to size their own independent .panel-content scroll
+   regions against, exactly as before. Width stays capped/centered
+   exactly as before. */
+/* Was max-width:1440px; margin:0 auto -- same width-cap removal as .page
+   (round 19), for the same reason: centered .layout inside .app-body,
+   leaving empty space on a wide viewport instead of filling it. Now fills
+   .app-body's full width (width:100% already did the height-matching
+   equivalent for the grid; margin:0 auto was the only thing actually
+   constraining/centering it). The rightmost panel (400px fixed column)
+   lands flush against the real screen edge as a result -- its own
+   .panel-content scrollbar (still fully independent, unchanged) now sits
+   at that same true edge instead of wherever a centered 1440px box used
+   to end. */
+.layout {
+  width: 100%;
+  flex: 1;
+  min-height: 320px;
+  display: grid;
+  grid-template-columns: 280px 1fr 400px;
+  gap: var(--space-3);
+}
+/* Each panel already stretches to .layout's full (now genuinely bounded)
+   row height via grid's default align-items:stretch -- panel-title stays
+   put at the top (a normal, non-scrolling flex item) while .panel-content
+   below it (flex:1; overflow-y:auto) becomes its own independent scroll
+   region. This was already the intent of these two rules; they only ever
+   worked correctly once their ancestors above actually had bounded
+   heights (the .app-body/#dashboardView/.layout changes above). Was its
+   own bordered/backgrounded/rounded box (background: var(--surface);
+   border: 1px solid var(--border); border-radius: var(--radius)) -- same
+   "box inside the page" fragmentation .section-block already fixed for
+   the other three pages, removed here too. These three panels sit side
+   by side (not stacked), so unlike .section-block's top-border-between-
+   stacked-sections pattern, the divider here is a thin VERTICAL line
+   between columns instead -- border-right on every panel but the last,
+   the exact same technique .profile-sidebar already uses to separate
+   itself from .profile-main. overflow:hidden is kept (not part of the
+   box styling -- it's what keeps this panel's own height from growing
+   past its bounded grid-row height, which is what makes .panel-content's
+   independent scroll actually kick in instead of the whole panel
+   stretching). */
+.panel {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.panel:not(:last-child) { border-right: 1px solid var(--border); }
+.panel-title {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.panel-content { flex: 1; overflow-y: auto; padding: var(--space-3); }
+
+/* OVERVIEW EXTRAS -- charts + system-health strip, additive content below
+   the three core panels above (untouched). flex:none in #dashboardView's
+   flex column -- deliberately intrinsic/compact sizing now, NOT stretched
+   to fill leftover viewport space (a previous pass did that, via flex:1 +
+   centering on .chart-panel-body below, and it read as too much empty
+   space padded around a small chart once actually seen -- the fix is
+   simply to stop asking this section to grow at all, not to make the
+   charts themselves bigger). Whatever height this DOESN'T need flows to
+   .layout above instead (its own flex:1), which is the actual
+   "redistribute the reclaimed space back to the core-panel row" fix. */
+/* Was max-width:1440px; margin:...auto 0 -- same width-cap removal as
+   .layout/.page (round 19/20), for the same reason. */
+.overview-extras {
+  width: 100%;
+  margin-top: var(--space-2);
+  flex: none;
+}
+.overview-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+/* Was its own bordered/backgrounded/rounded box (border/radius/
+   background), same as .panel above -- removed for the same reason, same
+   fix: these three charts sit side by side too (not stacked), so this
+   gets the identical thin-vertical-divider treatment as .panel rather
+   than .section-block's stacked top-border pattern. .panel-title inside
+   is the exact same (UNCHANGED) class the three core panels use for their
+   own headers -- its own border-bottom is what still visually separates
+   each chart's heading from its body, same mechanism as the panels above. */
+.chart-panel { overflow: hidden; }
+.chart-panel:not(:last-child) { border-right: 1px solid var(--border); }
+/* Was padding: 8px 10px 10px -- nudged up now that removing the health
+   strip below (see .nav-health-item's own comment) freed a little more
+   vertical room on the Overview page; still snug/intrinsic (NOT flex:1 +
+   centered -- that was the actual "too much empty space" bug from a
+   previous round, not the padding value itself), just a bit more breathing
+   room around each chart's own small, fixed content size (app.js's
+   renderRiskDonut/renderBarChart/renderAreaChart). */
+.chart-panel-body { padding: 10px 12px 12px; }
+
+/* Risk Distribution donut legend -- tightened spacing to match the
+   smaller donut it sits next to (app.js's renderRiskDonut draws it at
+   96x96 now, was 140x140). */
+.donut-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+  text-transform: capitalize;
+}
+.donut-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+/* Top Trigger Categories -- plain CSS bar chart, no charting library
+   (none exists anywhere else in this dashboard -- confirmed by checking
+   before adding one; introducing a new external JS dependency, whether
+   vendored or CDN-loaded, would cut against this project's whole
+   "no build step, no new install-time/network dependency" packaging
+   story the same way adopting a frontend framework already was ruled out
+   for). Bars use --trend now (was the neutral --border-strong) -- the
+   SAME single accent color Alerts Over Time uses, deliberately not a
+   distinct hue per category: a trigger-type count isn't a severity
+   signal, and a rainbow of per-bar colors would read as decorative
+   rather than meaningful, which this app avoids everywhere else. Was
+   height: 84px -- bumped to fit a GUARANTEED-height label row (see
+   .bar-chart-label below) without squeezing it into whatever the
+   value+bar happened to leave, which is what let a label like
+   "sensitive_ratio" clip against the card's bottom edge. */
+.bar-chart { display: flex; align-items: flex-end; gap: 5px; height: 100px; }
+.bar-chart-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  cursor: pointer;
+}
+.bar-chart-value { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-bottom: 3px; line-height: 1; }
+/* The bar's actual plottable region -- a light track (--trend-bg, the
+   same token the Alerts Over Time area-fill uses) spanning the full
+   available height, with the colored --trend bar rising from its bottom
+   proportional to that category's count. flex:1 so it's the one flexible
+   element in the column, absorbing whatever height the fixed-size value/
+   label rows above and below it don't need, instead of the label having
+   to compete for space. */
+.bar-chart-track {
+  flex: 1;
+  width: 100%;
+  max-width: 26px;
+  display: flex;
+  align-items: flex-end;
+  background: var(--trend-bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bar-chart-bar {
+  width: 100%;
+  background: var(--trend);
+  border-radius: 3px 3px 1px 1px;
+  min-height: 3px;
+  transition: opacity .12s ease;
+}
+.bar-chart-col:hover .bar-chart-bar { opacity: .82; }
+/* Explicit, GUARANTEED height (not just a margin-top on otherwise
+   auto-sized text) -- this reserved space is the actual fix for a label
+   clipping at the bottom of the card: it can no longer be squeezed out by
+   its siblings, only truncate horizontally (ellipsis) if the column
+   itself is too narrow, with the full label + trigger count available via
+   the shared custom tooltip on hover (app.js's showBarChartTooltip) --
+   not a native browser title tooltip. */
+.bar-chart-label {
+  height: 12px;
+  line-height: 12px;
+  margin-top: 5px;
+  font-size: 9px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Alerts Over Time -- a real line/area chart, still plain inline SVG, no
+   charting library (see app.js's renderAreaChart for why that still holds
+   even with the curve/gradient/dots/gridlines/tooltip this round added).
+   Plots max daily severity now, not volume -- still DOES use color
+   deliberately (--trend/--trend-bg, this file's own :root section),
+   exempt from the severity-only color rule for the same reason as before
+   (a distinct, meaningful hue for readability, not decoration -- same "a
+   real signal earns its own token" precedent as --ai) -- severity here is
+   already carried by the Y POSITION against the fixed 0-100 gridlines,
+   the trend color itself is just this chart's own consistent identity,
+   not a second severity encoding. */
+.trend-chart-wrap { display: flex; align-items: stretch; gap: 6px; }
+/* Right-aligned, evenly spaced to line up with the 100/50/0 gridlines
+   drawn by app.js at those same fractions of the plot's height. */
+.trend-chart-yaxis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-faint);
+  text-align: right;
+  padding: 1px 0;
+}
+.trend-chart-plot { flex: 1; min-width: 0; }
+.line-chart-svg { width: 100%; height: 78px; display: block; }
+.chart-gridline { stroke: var(--border); stroke-width: 1; }
+.chart-dot { fill: var(--trend); }
+/* Invisible, larger hit target layered on top of each small visible dot
+   -- easier to hover precisely without making the dot itself look big. */
+.chart-dot-hit { fill: transparent; cursor: pointer; }
+.line-chart-labels { display: flex; justify-content: space-between; margin-top: 4px; }
+.line-chart-label { font-size: 9px; color: var(--text-faint); }
+
+/* Shared hover tooltip for hand-rolled SVG charts (app.js's
+   showChartTooltip/positionChartTooltip) -- position:fixed, follows the
+   cursor, pointer-events:none so it never itself becomes the hover
+   target and steals the mouseleave that would hide it. */
+.chart-tooltip {
+  position: fixed;
+  z-index: 2000;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-tag);
+  box-shadow: var(--shadow-float);
+  padding: 6px 10px;
+  font-size: 11.5px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.chart-tooltip-value { font-weight: 700; color: var(--text); }
+.chart-tooltip-detail { color: var(--text-dim); font-size: 10.5px; margin-top: 2px; }
+/* Top Trigger Categories' plain-language explanation line -- the only
+   tooltip content long enough to need wrapping, so this overrides the
+   parent .chart-tooltip's own white-space:nowrap (sized for the shorter
+   value/detail lines) just for this line. */
+.chart-tooltip-desc { color: var(--text-dim); font-size: 10.5px; margin-top: 4px; max-width: 200px; white-space: normal; }
+
+/* System health status -- moved off the main Overview page into the
+   hamburger nav drawer (a "System Status" .nav-section, reusing that
+   class's existing title/spacing treatment) so this quick-glance check no
+   longer costs main-page vertical space; freed space went back to
+   .layout above via its existing flex:1 (see that rule's comment) and
+   partly into .chart-panel-body's own slightly larger sizing below. Three
+   independently-checkable signals, each its own label + ok/not-ok dot +
+   detail line -- stacked vertically now (was one horizontal row) to fit
+   the drawer's 272px width without wrapping/truncating. Deliberately no
+   combined "all systems normal" badge, same as before. */
+.nav-health-item { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; }
+.nav-health-item + .nav-health-item { margin-top: 9px; }
+.nav-health-text { min-width: 0; }
+.nav-health-label { display: block; color: var(--text); font-weight: 600; }
+.nav-health-detail { display: block; color: var(--text-dim); font-size: 11px; margin-top: 1px; }
+.health-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; margin-top: 4px; }
+.health-dot.health-ok { background: var(--low); }
+.health-dot.health-failing { background: var(--critical); }
+.health-dot.health-unknown { background: var(--text-faint); }
+
+/* LEFT SIDEBAR -- severity border reflects THIS employee's risk band; low
+   stays visually silent (transparent), matching "quiet until it isn't." */
+.risk-list { display: flex; flex-direction: column; gap: 8px; }
+.risk-item {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.risk-top { display: flex; justify-content: space-between; align-items: center; }
+.risk-user { font-weight: 600; font-size: 13.5px; }
+.risk-dept { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; }
+.risk-score { font-family: var(--mono); font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* LIVE EMPLOYEE MONITORING -- was a 2-column grid of large cards
+   (.employee-grid/.employee-card, ~150-180px each); replaced with a
+   single-column list of compact rows, same density language as the "All
+   Employees -- By Risk" panel's own .risk-list/.risk-item (which this
+   deliberately mirrors) rather than a grid of large tiles. The whole
+   point: maximize how many employees are visible without scrolling,
+   keeping the exact same information per employee (name, department,
+   score + risk-level text, status dot, alert badge when present,
+   sparkline) -- just laid out horizontally in one line instead of
+   stacked vertically in a tall card. */
+.employee-list { display: flex; flex-direction: column; gap: 6px; }
+.employee-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.employee-row:hover { border-color: var(--border-strong); background: #202024; }
+.employee-row-identity { flex: 1 1 130px; min-width: 0; }
+.employee-row-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Department only (hostname stays profile-page detail, same call as the
+   old card). */
+.employee-row-dept {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Online/offline is not color-only (a real accessibility concern on a
+   plain filled dot that only changed hue): offline is a hollow/outlined
+   ring, online is a solid filled dot -- shape AND color both carry the
+   state. No text label next to it -- the dot (plus its title/aria-label
+   for assistive tech or hovering) is the whole signal. */
+.live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  background: transparent;
+  border: 2px solid var(--text-faint);
+  flex: none;
+}
+.live-dot.online { background: var(--low); border-color: var(--low); }
+/* Sparkline sits inline in the row, given a flexible-but-bounded width
+   slot rather than the full row width the old card gave it below the
+   score -- still the same renderSparklineSvg() output, just a narrower
+   container now. */
+.employee-row-spark { flex: 1 1 90px; min-width: 60px; max-width: 140px; line-height: 0; }
+.employee-row-score { flex: none; text-align: right; min-width: 54px; }
+.employee-row-score-num { font-family: var(--mono); font-size: 19px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.employee-row-score-label { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; }
+.card-sparkline-svg { width: 100%; height: 26px; display: block; }
+
+/* Live Employee Monitoring -- Grid mode. List mode (.employee-list/
+   .employee-row above) stays the default and is what the previous round's
+   "replace the 2x2 grid" request actually landed on; this is a genuinely
+   separate, reintroduced card component for admins who prefer a visual
+   grid over the compact list, switched via .employee-view-controls above
+   and persisted in localStorage same as the theme toggle. --employee-
+   grid-cols is set inline by app.js's setEmployeeGridColumns() (2/3/4),
+   defaulting to 2 here only as a fallback if that's ever unset. */
+.employee-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--employee-grid-cols, 2), 1fr);
+  gap: var(--space-3);
+}
+.employee-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.employee-card:hover { border-color: var(--border-strong); background: #202024; }
+.employee-card-top { display: flex; align-items: center; gap: 8px; }
+.employee-card-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.employee-card-dept {
+  color: var(--text-dim);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.employee-card-spark { line-height: 0; }
+.employee-card-bottom { display: flex; align-items: baseline; gap: 8px; margin-top: 2px; }
+.employee-card-score-num { font-family: var(--mono); font-size: 19px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.employee-card-score-label { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--text-dim); }
+
+/* Severity marker, container-level -- kept separate from the .low/.medium/
+   .high/.critical text-color utility below so applying it to a whole row
+   (employee-row/employee-card/risk-item/ai-box) only tints the left
+   border, not every inherited text node inside it. */
+.employee-row, .employee-card, .risk-item, .ai-box { border-left-width: 3px; border-left-style: solid; }
+.sev-critical { border-left-color: var(--critical) !important; }
+.sev-high { border-left-color: var(--high) !important; }
+.sev-medium { border-left-color: var(--medium) !important; }
+.sev-low { border-left-color: transparent !important; }
+
+/* ALERTS FEED */
+.ai-feed { display: flex; flex-direction: column; gap: 10px; }
+.ai-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.ai-user { font-weight: 600; margin-bottom: 8px; font-size: 13.5px; }
+.ai-section { margin-top: 9px; }
+.ai-section-title { color: var(--text-faint); font-size: 9.5px; font-weight: 700; letter-spacing: .06em; margin-bottom: 5px; text-transform: uppercase; }
+.ai-anomaly {
+  font-family: var(--mono);
+  background: var(--surface-2);
+  border-left: 2px solid var(--border-strong);
+  padding: 6px 8px;
+  border-radius: 0 var(--radius-tag) var(--radius-tag) 0;
+  margin-bottom: 5px;
+  font-size: 11.5px;
+}
+.ai-empty { color: var(--text-faint); font-size: 13px; padding: 18px; text-align: center; }
+
+/* FULL-PAGE VIEWS (employee profile) -- was height:100%/overflow:hidden at
+   one point, which forced a fixed-height layout where the sidebar and main
+   column each scrolled independently in their own confined pane (see
+   .profile-sidebar/.profile-main below). That made long content (a full
+   alert history, several reasoning cards, raw logs) clip inside its own
+   pane instead of following one continuous page scroll -- deliberately
+   NOT brought back here. This still scrolls as ONE continuous unit, same
+   as it's read ever since that correction; the only thing that changed
+   (dashboard-view scroll-locking pass) is WHERE that scroll container
+   lives -- .app-body no longer scrolls at all (now overflow:hidden, so the
+   dashboard view's three panels can each scroll independently instead),
+   so .page owns its own height:100%/overflow-y:auto to keep exactly the
+   same "whole page scrolls together" behavior it already had. */
+/* Was its own bordered/backgrounded/rounded box (background: var(--surface);
+   border: 1px solid var(--border); border-radius: var(--radius)) floating
+   inside .app-body's own padding -- the same "box inside the page"
+   fragmentation .section-block just fixed one level down, just one level
+   up: the whole employee profile / Company Profile / All Employees page
+   was itself a panel floating on the page background, on top of every
+   section inside it ALSO being boxed. Removed entirely now -- this page's
+   content sits directly on the app's own background (body's --bg, same
+   surface the dashboard's own panels already sit on), with .app-body's
+   existing padding (style.css's own .app-body rule) still giving it
+   normal edge spacing, same as the dashboard view already has. Every
+   section inside (.section-block, .profile-card, .company-section,
+   .employee-list/.employee-cards-grid) keeps its own background exactly
+   as before -- this only removes the outer wrapper's, not theirs. */
+/* Was max-width:1440px; margin:0 auto -- centered .page (the scroll
+   container itself) inside .app-body, leaving empty space on a wide
+   viewport and pushing this scrollbar in from the true screen edge.
+   Removed so .page fills .app-body's full width, same as #dashboardView
+   already does (that view's own top-level scroll container has never had
+   a width cap either -- only ITS inner content, .layout/.overview-extras,
+   is capped+centered). Both .page and #dashboardView now share the exact
+   same width behavior (unconstrained, filling .app-body), so their
+   scrollbars land at the identical horizontal position -- .app-body's own
+   padding (below) is still what keeps that position off the literal
+   screen edge, same as it already did for the dashboard. */
+.page {
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+/* Correction: this identity/back-navigation strip does NOT stay pinned --
+   the only thing that stays fixed while scrolling the profile page is the
+   site-wide .topbar (outside .app-body entirely, so it's never part of
+   the scrolling region in the first place -- no sticky positioning needed
+   for it either). This block is a completely normal, non-positioned
+   element that scrolls away under the topbar exactly like the reasoning
+   card, alert history, and everything else on the page. Kept as its own
+   class (rather than inlined back into .page) purely to group two sibling
+   elements (the back-button row and .page-header) into one flex child --
+   no styling of its own needed now that .page has no box/corners of its
+   own to match. */
+.page-header {
+  /* Was padding: var(--space-3) (12px all around), then 8px vertical --
+     tightened again (8px -> 6px) per explicit follow-up ask for more.
+     Horizontal still unchanged throughout. Text size (h2 below) stays
+     untouched -- this is a spacing reduction, not a legibility one. */
+  padding: 6px var(--space-3);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+}
+.page-header h2 { font-size: 18px; line-height: 1.3; }
+/* Back-button row -- was a bare inline style (padding:10px 20px 0;)
+   repeated verbatim in index.html for all three pages using this header
+   pattern (employee profile, Company Profile, All Employees); pulled into
+   one shared class so "tighten consistently across all three" is
+   guaranteed by construction rather than three separately-edited copies
+   staying in sync by hand. Vertical padding only reduced (10px -> 5px),
+   horizontal left as it was. */
+.page-back-row { padding: 3px 20px 0; }
+.back-btn {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 11px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12.5px;
+  margin-bottom: 3px;
+  transition: color .12s ease, border-color .12s ease;
+}
+.back-btn:hover { color: var(--text); border-color: var(--border-strong); }
+.close-btn {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 9px 15px;
+  cursor: pointer;
+  font-weight: 700;
+}
+.close-btn:hover { border-color: var(--text); }
+
+/* Profile header action pair (Generate Employee Report / Offboard) --
+   one shared base so both buttons share identical height/padding/weight
+   and read as a deliberate pair, not two differently-sized controls that
+   happen to sit next to each other. Color is the only thing that differs
+   -- neutral for the report action, critical/red for the destructive one
+   (.danger), consistent with color-carries-meaning everywhere else in
+   this dashboard. */
+.profile-header-btn {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 9px 15px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12.5px;
+  line-height: 1;
+  transition: border-color .12s ease, color .12s ease, background .12s ease;
+}
+.profile-header-btn:hover { border-color: var(--accent); color: var(--accent); }
+.profile-header-btn.danger { color: var(--critical); border-color: var(--critical); }
+.profile-header-btn.danger:hover { background: var(--critical-bg); color: var(--critical); }
+
+/* Live Employee Monitoring's panel-title needs a right-aligned action
+   button -- .panel-title elsewhere (Top Risk Employees, Alert Feed) stays
+   plain text, so this is a scoped modifier, not a change to .panel-title
+   itself. */
+.panel-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* "Live Employee Monitoring" title links to the dedicated full page
+   (#/employees) -- inherits .panel-title's small-caps/dim-text styling by
+   default (no visual noise added to the header at rest); only differs
+   from plain panel-title text on hover/focus, same restrained treatment
+   as this app's other inline text links (.stat-dropdown-name). */
+.panel-title-link { color: inherit; text-decoration: none; }
+.panel-title-link:hover, .panel-title-link:focus-visible { color: var(--accent); text-decoration: underline; }
+
+/* Live Employee Monitoring's list/grid view toggle -- sits where the
+   "Generate Weekly Report" button used to (moved into the hamburger nav
+   instead, alongside System Status). Two controls stacked so the column
+   count picker only takes horizontal space when grid mode is actually
+   active (.hidden, same utility class used everywhere else, toggled by
+   app.js's updateEmployeeViewControls()). */
+.employee-view-controls { display: flex; align-items: center; gap: 8px; flex: none; }
+.view-toggle-row { display: flex; border: 1px solid var(--border-strong); border-radius: var(--radius); overflow: hidden; }
+.view-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.view-toggle-btn + .view-toggle-btn { border-left: 1px solid var(--border-strong); }
+.view-toggle-btn:hover { color: var(--text); }
+.view-toggle-btn.active { background: var(--accent); color: var(--bg); }
+.employee-grid-cols-select {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Weekly report progress overlay -- a real long-running job (see
+   routes/reports.py), not a quick spinner, so this stays visible and
+   explicit for the whole duration rather than a small inline button-text
+   change like the per-employee report uses. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-box {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 24px 28px;
+  min-width: 340px;
+  max-width: 420px;
+}
+.modal-title { font-weight: 700; font-size: 15px; margin-bottom: 14px; color: var(--text); }
+.modal-body { display: flex; flex-direction: column; gap: 10px; }
+#weeklyReportProgressText { font-size: 13px; color: var(--text); }
+.progress-track {
+  width: 100%;
+  height: 8px;
+  background: var(--surface-2);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.modal-note { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
+.edit-field { margin-bottom: 10px; }
+.edit-field label { display: block; font-size: 11.5px; color: var(--text-dim); margin-bottom: 5px; font-weight: 600; }
+.edit-field input, .edit-field select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  color: var(--text);
+}
+.save-btn {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  padding: 8px 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.save-btn:hover { opacity: .88; }
+.save-hint { font-size: 12px; color: var(--low); margin-left: 10px; }
+.profile-content { display: grid; grid-template-columns: 300px 1fr; }
+.profile-sidebar { border-right: 1px solid var(--border); padding: var(--space-4); }
+.profile-main { padding: var(--space-4); }
+
+/* COMPANY PROFILE PAGE -- was an auto-fitting column grid
+   (repeat(auto-fit, minmax(...))), which let unrelated sections land side
+   by side purely by coincidence of column-fill order, and left awkward
+   dead space under a short card next to a much taller one. Replaced with
+   a deliberate single-column stack: every row's placement and grouping is
+   chosen by what the section actually IS, not by which column happens to
+   be shortest at that point -- no fill algorithm involved at all, so
+   there's nothing left to produce that coincidence. Each row is exactly
+   as tall as its own content and spans the full available width, which is
+   also what makes this work at any viewport width with no breakpoint
+   needed: everything just gets wider or narrower together. */
+.company-page-content {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ALL EMPLOYEES PAGE (#/employees) -- just a padded wrapper around the
+   exact same .employee-list/.employee-cards-grid content the dashboard
+   box already renders (see app.js's renderEmployeeGrid); no new list/card
+   styling needed here, this page is just more room for it. */
+.all-employees-content { padding: var(--space-4); }
+
+.company-section {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+}
+
+/* Company name & code -- a full-width banner, not a card competing for
+   column space: this is the single most frequently-referenced piece of
+   information on this page (copying the code to onboard a new device),
+   and it's naturally short, so it earns prominent top placement instead
+   of being sized/positioned by a grid algorithm. Two-up on a wide
+   viewport (name left, code+copy right), stacks on a narrow one -- no
+   fixed breakpoint, just flex-wrap responding to available width. */
+.company-banner {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+}
+.company-banner-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-faint);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.company-banner-name { font-size: 22px; font-weight: 700; }
+.company-banner-code-block { min-width: 260px; }
+.company-banner-code-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* Email & Notifications -- SMTP and Notify Employee are grouped as ONE
+   .company-section (see index.html's own comment on this block) rather
+   than two independent cards that happen to land adjacent to each other
+   -- Notify Employee explicitly reuses the SMTP account configured right
+   above it in the same card, so the layout says so directly. Stacked
+   (not side-by-side) so that dependency still reads top-to-bottom. */
+.company-subsection-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.company-subsection-divider {
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-4) 0;
+}
+.profile-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+/* Lighter alternative to .profile-card for a section that already lives
+   inside its own bordered/backgrounded container (.page) -- wrapping it
+   in ANOTHER full border+background box on top of that read as nested,
+   fragmented tiles rather than one cohesive page. Just a heading
+   (.profile-card-title, unchanged) plus generous whitespace, with a
+   single thin divider line above every section but the first -- clear
+   where one section ends and the next begins, without each one floating
+   as its own separate panel. .profile-card itself is untouched and still
+   the right choice for things that genuinely DO float above the page
+   (modal overlays). */
+.section-block + .section-block {
+  margin-top: 26px;
+  padding-top: 26px;
+  border-top: 1px solid var(--border);
+}
+/* Recent Alert History / Recent Significant Events -- display-only caps:
+   every fetched entry still renders into the DOM (nothing is dropped or
+   re-fetched with a smaller limit), this just bounds how tall the
+   container gets before the REST scroll within it instead of growing the
+   whole profile page indefinitely. ~34px per .history-row (padding +
+   line-height) -- 420px fits ~12 rows (Alert History's "10-12" target),
+   280px fits ~8 rows (Significant Events' "5-10" target). */
+#alertHistory { max-height: 420px; overflow-y: auto; }
+#significantEvents { max-height: 280px; overflow-y: auto; }
+#profileInfo { line-height: 2; }
+.profile-card-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+/* Overlay modals -- auxiliary drill-downs without their own route (raw
+   logs, company profile, archive list). One of the two places a shadow is
+   still earned -- these genuinely float above the page. */
+.profile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.65);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+.profile-modal {
+  width: 92%;
+  max-width: 1080px;
+  height: 88%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-float);
+}
+.profile-header {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* AI Reasoning Core assessment -- shown inline within its alert's Recent
+   Alert History row (agent_logic/dismissal.py's dismiss/undo merge), not
+   its own bordered card anymore -- the `ai` accent on the badge is what
+   marks this content as LLM-generated, a source signal not a severity one. */
+.reasoning-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.reasoning-badge {
+  display: inline-block;
+  color: var(--ai);
+  background: var(--ai-bg);
+  border: 1px solid var(--ai);
+  border-radius: var(--radius-tag);
+  padding: 3px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.reasoning-recommendation {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: var(--radius-tag);
+  background: var(--ai-bg);
+  color: var(--ai);
+  font-weight: 700;
+  font-size: 12.5px;
+  margin: 8px 0;
+}
+.reasoning-explanation { font-size: 13px; line-height: 1.55; margin-bottom: 10px; }
+.reasoning-meta { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-bottom: 12px; }
+.reasoning-evidence {
+  font-family: var(--mono);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 10px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.reasoning-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.reasoning-dismiss-btn {
+  background: transparent; color: var(--text-dim); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  padding: 8px 13px; font-weight: 700; cursor: pointer; font-size: 12.5px;
+}
+.reasoning-dismiss-btn:hover { color: var(--text); border-color: var(--text); }
+.history-row {
+  font-family: var(--mono);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.history-entry { border-bottom: 1px solid var(--border); }
+.history-entry summary.history-row {
+  cursor: pointer;
+  border-bottom: none;
+  list-style: none;
+}
+.history-entry summary.history-row::-webkit-details-marker { display: none; }
+.history-entry summary.history-row:hover { color: var(--text); background: var(--surface-2); }
+.history-entry[open] summary.history-row { color: var(--text); }
+.history-entry-body { padding: 4px 0 12px; }
+.reasoning-decision-log {
+  font-family: var(--mono);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 10px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+.reasoning-dismiss-reason {
+  background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 7px 9px; font-size: 12.5px; font-family: var(--sans);
+}
+
+/* Small inline status/severity tags -- alert-history rows, judgment
+   decision status next to a timestamp. Rectangular, tinted+outlined in
+   the token it represents, never filled solid (restraint). */
+.tag {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 3px 8px;
+  border-radius: var(--radius-tag);
+  border: 1px solid;
+}
+.tag-low { color: var(--low); border-color: var(--low); background: var(--low-bg); }
+.tag-medium { color: var(--medium); border-color: var(--medium); background: var(--medium-bg); }
+.tag-high { color: var(--high); border-color: var(--high); background: var(--high-bg); }
+.tag-critical { color: var(--critical); border-color: var(--critical); background: var(--critical-bg); }
+.tag-neutral { color: var(--text-dim); border-color: var(--border-strong); }
+
+/* SEVERITY TEXT COLOR (score numbers, plain labels) -- kept as its own
+   simple utility, deliberately separate from the .sev-* border markers and
+   .tag-* badge classes above so applying severity color to a CONTAINER
+   never accidentally tints unrelated text nested inside it. */
+.low { color: var(--low); }
+.medium { color: var(--medium); }
+.high { color: var(--high); }
+.critical { color: var(--critical); }
+
+.hidden { display: none !important; }
